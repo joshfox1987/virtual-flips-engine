@@ -5,7 +5,9 @@ import { useState, useRef } from 'react';
 export default function CameraTriage() {
   const [image, setImage] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<string>('');
+  const [research, setResearch] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
+  const [researchLoading, setResearchLoading] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -20,6 +22,8 @@ export default function CameraTriage() {
   const analyzeImage = async () => {
     if (!image) return;
     setLoading(true);
+    setAnalysis('');
+    setResearch('');
     try {
       const res = await fetch('/api/analyze', {
         method: 'POST',
@@ -33,6 +37,25 @@ export default function CameraTriage() {
       setAnalysis('Error analyzing image. Check console.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runMarketResearch = async () => {
+    if (!analysis) return;
+    setResearchLoading(true);
+    try {
+      const res = await fetch('/api/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemDetails: analysis }),
+      });
+      const data = await res.json();
+      setResearch(data.result);
+    } catch (error) {
+      console.error('Failed to run research:', error);
+      setResearch('Error running market research. Check console.');
+    } finally {
+      setResearchLoading(false);
     }
   };
 
@@ -71,9 +94,28 @@ export default function CameraTriage() {
       )}
 
       {analysis && (
-        <div className="bg-gray-100 text-zinc-900 p-6 rounded-md shadow-inner whitespace-pre-wrap">
-          <h2 className="font-bold mb-2">Triage Report:</h2>
-          {analysis}
+        <div className="flex flex-col gap-4">
+          <div className="bg-gray-100 text-zinc-900 p-6 rounded-md shadow-inner whitespace-pre-wrap">
+            <h2 className="font-bold mb-2 text-lg border-b pb-1 border-gray-300">Triage Report:</h2>
+            {analysis}
+          </div>
+          
+          <button
+            onClick={runMarketResearch}
+            disabled={researchLoading}
+            className="bg-purple-600 text-white px-6 py-3 rounded-md hover:bg-purple-700 transition disabled:opacity-50 font-semibold shadow-md"
+          >
+            {researchLoading ? 'Searching Comps & Market Value...' : 'Run Market Research Pipeline'}
+          </button>
+        </div>
+      )}
+
+      {research && (
+        <div className="bg-purple-50 text-zinc-900 p-6 rounded-md shadow-inner border border-purple-200 whitespace-pre-wrap">
+          <h2 className="font-bold mb-2 text-lg text-purple-900 border-b pb-1 border-purple-200">
+            Market Intelligence Report:
+          </h2>
+          {research}
         </div>
       )}
     </main>
