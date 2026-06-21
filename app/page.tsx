@@ -71,7 +71,7 @@ export default function CameraTriage() {
       )}
 
       {analysis && (
-        <div className="bg-gray-100 p-6 rounded-md shadow-inner whitespace-pre-wrap">
+        <div className="bg-gray-100 text-zinc-900 p-6 rounded-md shadow-inner whitespace-pre-wrap">
           <h2 className="font-bold mb-2">Triage Report:</h2>
           {analysis}
         </div>
