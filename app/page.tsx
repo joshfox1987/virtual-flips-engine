@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import Markdown from 'react-markdown';
 
 export default function CameraTriage() {
   const [image, setImage] = useState<string | null>(null);
@@ -111,11 +112,13 @@ export default function CameraTriage() {
       )}
 
       {research && (
-        <div className="bg-purple-50 text-zinc-900 p-6 rounded-md shadow-inner border border-purple-200 whitespace-pre-wrap">
-          <h2 className="font-bold mb-2 text-lg text-purple-900 border-b pb-1 border-purple-200">
+        <div className="bg-purple-50 text-zinc-900 p-6 rounded-md shadow-inner border border-purple-200">
+          <h2 className="font-bold mb-4 text-lg text-purple-900 border-b pb-1 border-purple-200">
             Market Intelligence Report:
           </h2>
-          {research}
+          <div className="text-zinc-900 text-sm space-y-4 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:mt-6 [&_h4]:text-base [&_h4]:font-bold [&_h4]:mt-4 [&_h5]:text-sm [&_h5]:font-bold [&_h5]:mt-3 [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mt-1.5 [&_strong]:font-semibold">
+            <Markdown>{research}</Markdown>
+          </div>
         </div>
       )}
     </main>
