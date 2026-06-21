@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     // Strip the base64 prefix from the image string
     const base64Data = image.split(',')[1];
 
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const prompt = "You are the Triage Agent for an eBay flipping business. Look at this image. Identify the item, the brand, the likely model, and assess its physical condition based on visual evidence. Be concise.";
 
