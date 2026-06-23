@@ -16,13 +16,19 @@ function parseImageDataUrl(dataUrl: string): { data: string; mimeType: string } 
 
 async function imageUrlToInlineData(url: string): Promise<{ data: string; mimeType: string } | null> {
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
+    // Handle Vercel private blob URLs by removing the download parameter
+    const cleanUrl = url.replace('?download=1', '');
+    const res = await fetch(cleanUrl);
+    if (!res.ok) {
+      console.warn('imageUrlToInlineData: fetch failed for', cleanUrl, 'status:', res.status);
+      return null;
+    }
     const buffer = await res.arrayBuffer();
     const mimeType = res.headers.get('content-type') ?? 'image/jpeg';
     const data = Buffer.from(buffer).toString('base64');
     return { data, mimeType };
-  } catch {
+  } catch (error) {
+    console.warn('imageUrlToInlineData: error fetching', url, error instanceof Error ? error.message : String(error));
     return null;
   }
 }
@@ -70,7 +76,8 @@ Be concise. Use markdown headers and bullet points.`;
     }
 
     if (imageParts.length === 0) {
-      return NextResponse.json({ error: 'No valid images provided.' }, { status: 400 });
+      console.warn('Analyze: no valid images after processing', rawImages.length, 'input(s)');
+      return NextResponse.json({ error: 'No valid images could be processed. Check image URLs.' }, { status: 400 });
     }
 
     const result = await model.generateContent([prompt, ...imageParts]);

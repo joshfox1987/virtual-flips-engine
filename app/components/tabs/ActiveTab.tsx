@@ -292,16 +292,64 @@ function ListingCard({ listing }: { listing: ListingItem }) {
 }
 
 export function ActiveTab() {
-  const { activeListings } = useApp();
+  const { userId, activeListings, updateActiveListing } = useApp();
+  const [sweepLoading, setSweepLoading] = useState(false);
+  const [sweepMessage, setSweepMessage] = useState('');
+
+  const runAutoRelistSweep = async () => {
+    setSweepLoading(true);
+    setSweepMessage('');
+
+    try {
+      const res = await fetch('/api/ebay/auto-relist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Auto-relist sweep failed.');
+      }
+
+      if (data.relisted > 0) {
+        for (const listing of activeListings) {
+          if (!listing.ebayOfferId || !listing.autoRelistEnabled) continue;
+          updateActiveListing(listing.id, { listedAt: new Date().toISOString() });
+        }
+      }
+
+      setSweepMessage(`Sweep complete: ${data.relisted} relisted out of ${data.processed} processed.`);
+    } catch (error) {
+      setSweepMessage(error instanceof Error ? error.message : 'Auto-relist sweep failed.');
+    } finally {
+      setSweepLoading(false);
+    }
+  };
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-zinc-900">Active Telemetry Workspace</h2>
-        <span className="text-sm text-gray-500">
-          {activeListings.length} live listing{activeListings.length !== 1 ? 's' : ''}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-500">
+            {activeListings.length} live listing{activeListings.length !== 1 ? 's' : ''}
+          </span>
+          <button
+            onClick={runAutoRelistSweep}
+            disabled={sweepLoading || activeListings.length === 0}
+            className="text-xs bg-zinc-900 text-white px-3 py-1.5 rounded hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {sweepLoading ? 'Running Sweep...' : 'Run Auto-Relist Sweep'}
+          </button>
+        </div>
       </div>
+
+      {sweepMessage && (
+        <div className="text-xs border border-gray-200 bg-gray-50 text-zinc-700 rounded px-3 py-2">
+          {sweepMessage}
+        </div>
+      )}
 
       {activeListings.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-gray-400">

@@ -35,16 +35,19 @@ export async function POST(req: Request) {
     const path = `items/${itemId}/${Date.now()}-${filename}`;
 
     const blob = await uploadImageToBlob(path, buffer, contentType || parsedData.mimeType);
+    const blobUrl = 'downloadUrl' in blob && typeof blob.downloadUrl === 'string'
+      ? blob.downloadUrl
+      : blob.url;
 
     const image = await db.image.create({
       data: {
         itemId,
-        blobUrl: blob.url,
+        blobUrl,
         variant: variant ?? 'original',
       },
     });
 
-    return NextResponse.json({ image, url: blob.url });
+    return NextResponse.json({ image, url: blobUrl });
   } catch (error) {
     console.error('Upload API error:', error);
     return NextResponse.json({ error: 'Failed to upload image.' }, { status: 500 });

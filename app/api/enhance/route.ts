@@ -25,8 +25,13 @@ export async function POST(req: Request) {
     }
 
     const { itemId, imageUrl } = parsed.data;
-    const sourceRes = await fetch(imageUrl);
+    
+    // Handle Vercel private blob URLs by removing the download parameter for proper fetch
+    const cleanUrl = imageUrl.replace('?download=1', '');
+    
+    const sourceRes = await fetch(cleanUrl);
     if (!sourceRes.ok) {
+      console.error('Enhance: failed to fetch source image from', cleanUrl, 'status:', sourceRes.status);
       return NextResponse.json({ error: 'Failed to fetch source image.' }, { status: 400 });
     }
 
@@ -50,18 +55,23 @@ export async function POST(req: Request) {
     const blobPath = `items/${itemId}/${Date.now()}-enhanced.jpg`;
     const blob = await uploadImageToBlob(blobPath, enhancedBuffer, 'image/jpeg');
 
+    const blobUrl = 'downloadUrl' in blob && typeof blob.downloadUrl === 'string'
+      ? blob.downloadUrl
+      : blob.url;
+
     const image = await db.image.create({
       data: {
         itemId,
-        blobUrl: blob.url,
+        blobUrl,
         variant: 'enhanced',
       },
     });
 
-    return NextResponse.json({ image, url: blob.url });
+    return NextResponse.json({ image, url: blobUrl });
   } catch (error) {
-    console.error('Enhance API error:', error);
-    return NextResponse.json({ error: 'Enhancement failed. Ensure Python + Pillow are installed.' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('Enhance API error:', msg);
+    return NextResponse.json({ error: 'Enhancement failed. ' + msg }, { status: 500 });
   } finally {
     await Promise.all(tempFiles.map(async file => {
       try {

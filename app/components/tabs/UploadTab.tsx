@@ -25,6 +25,45 @@ export function UploadTab() {
   const [qaLog, setQaLog] = useState<string[]>([]);
   const [qaError, setQaError] = useState('');
 
+  const compressImageToJpegDataUrl = (file: File, maxDimension = 1600, quality = 0.82): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const objectUrl = URL.createObjectURL(file);
+      const image = new Image();
+
+      image.onload = () => {
+        try {
+          const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+          const width = Math.max(1, Math.round(image.width * scale));
+          const height = Math.max(1, Math.round(image.height * scale));
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Failed to prepare image canvas.'));
+            return;
+          }
+
+          ctx.drawImage(image, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(dataUrl);
+        } catch (error) {
+          reject(error);
+        } finally {
+          URL.revokeObjectURL(objectUrl);
+        }
+      };
+
+      image.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error('Failed to decode image for upload.'));
+      };
+
+      image.src = objectUrl;
+    });
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!currentItemId) {
       setQaError('Item queue is still loading. Try again in a moment.');
@@ -34,28 +73,42 @@ export function UploadTab() {
     const files = Array.from(e.target.files ?? []);
     const remaining = 24 - uploadedImages.length;
     const toProcess = files.slice(0, remaining);
+    setQaError('');
     setUploadLoading(true);
 
     for (const [index, file] of toProcess.entries()) {
       try {
-        const base64 = await fileToBase64(file);
+        const dataUrl = await compressImageToJpegDataUrl(file);
+        const uploadFilename = (file.name?.replace(/\.[^.]+$/, '') || `upload-${crypto.randomUUID()}-${index}`) + '.jpg';
+
         const res = await fetch('/api/upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             itemId: currentItemId,
-            filename: file.name || `upload-${Date.now()}-${index}.jpg`,
-            contentType: file.type || 'image/jpeg',
-            dataUrl: base64,
+            filename: uploadFilename,
+            contentType: 'image/jpeg',
+            dataUrl,
             variant: 'original',
           }),
         });
-        const data = await res.json();
-        if (data.url) {
-          addUploadedImage(data.url);
+
+        const raw = await res.text();
+        let data: { url?: string; error?: string } = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          // Non-JSON responses can happen for edge limits like 413.
         }
-      } catch {
-        setQaError(`Failed to upload ${file.name}.`);
+
+        if (!res.ok || !data.url) {
+          const message = data.error ?? `Upload failed (${res.status}).`;
+          throw new Error(message);
+        }
+
+        addUploadedImage(data.url);
+      } catch (error) {
+        setQaError(error instanceof Error ? `Failed to upload ${file.name}: ${error.message}` : `Failed to upload ${file.name}.`);
       }
     }
 
@@ -64,14 +117,6 @@ export function UploadTab() {
     // Reset input so the same files can be re-selected if needed
     e.target.value = '';
   };
-
-  const fileToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
 
   const runAiFeedback = async () => {
     if (uploadedImages.length === 0) return;
