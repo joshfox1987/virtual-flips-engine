@@ -32,7 +32,8 @@ export async function POST(req: Request) {
     }
 
     const buffer = Buffer.from(parsedData.base64, 'base64');
-    const path = `items/${itemId}/${Date.now()}-${filename}`;
+    const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `items/${itemId}/${Date.now()}-${safeName}`;
 
     const blob = await uploadImageToBlob(path, buffer, contentType || parsedData.mimeType);
     const blobUrl = 'downloadUrl' in blob && typeof blob.downloadUrl === 'string'

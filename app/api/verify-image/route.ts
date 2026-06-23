@@ -5,8 +5,8 @@ import { z } from 'zod';
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
 const schema = z.object({
-  originalUrl: z.string().url(),
-  enhancedUrl: z.string().url(),
+  originalUrl: z.string().min(1),
+  enhancedUrl: z.string().min(1),
 });
 
 async function toInlineData(url: string): Promise<{ data: string; mimeType: string } | null> {

@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 
 const schema = z.object({
   itemId: z.string().min(1),
-  imageUrl: z.string().url(),
+  imageUrl: z.string().min(1),
 });
 
 export async function POST(req: Request) {
@@ -21,7 +21,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const parsed = schema.safeParse(body);
     if (!parsed.success) {
-      return NextResponse.json({ error: 'Invalid payload.' }, { status: 400 });
+      console.error('Enhance: validation failed', JSON.stringify(parsed.error.issues), 'body keys:', Object.keys(body ?? {}));
+      return NextResponse.json({ error: 'Invalid payload.', details: parsed.error.issues }, { status: 400 });
     }
 
     const { itemId, imageUrl } = parsed.data;
@@ -29,9 +30,23 @@ export async function POST(req: Request) {
     // Handle Vercel private blob URLs by removing the download parameter for proper fetch
     const cleanUrl = imageUrl.replace('?download=1', '');
     
-    const sourceRes = await fetch(cleanUrl);
+    // Re-encode any unencoded characters (e.g. spaces from filenames) that fetch() would reject
+    const fetchUrl = (() => {
+      try {
+        new URL(cleanUrl);
+        return cleanUrl; // already valid
+      } catch {
+        // Try encoding just the path portion
+        const q = cleanUrl.indexOf('?');
+        const base = q >= 0 ? cleanUrl.slice(0, q) : cleanUrl;
+        const query = q >= 0 ? cleanUrl.slice(q) : '';
+        return encodeURI(base) + query;
+      }
+    })();
+
+    const sourceRes = await fetch(fetchUrl);
     if (!sourceRes.ok) {
-      console.error('Enhance: failed to fetch source image from', cleanUrl, 'status:', sourceRes.status);
+      console.error('Enhance: failed to fetch source image from', fetchUrl, 'status:', sourceRes.status);
       return NextResponse.json({ error: 'Failed to fetch source image.' }, { status: 400 });
     }
 
