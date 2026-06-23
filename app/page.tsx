@@ -1,126 +1,193 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import Markdown from 'react-markdown';
+import { AppProvider, useApp, TabId } from './context/AppContext';
+import { UploadTab } from './components/tabs/UploadTab';
+import { InfoTab } from './components/tabs/InfoTab';
+import { DraftsTab } from './components/tabs/DraftsTab';
+import { ActiveTab } from './components/tabs/ActiveTab';
+import { Upload, BarChart2, Archive, Activity } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-export default function CameraTriage() {
-  const [image, setImage] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<string>('');
-  const [research, setResearch] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [researchLoading, setResearchLoading] = useState<boolean>(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
+  { id: 'upload', label: 'Upload', icon: <Upload size={16} /> },
+  { id: 'info', label: 'Optimize', icon: <BarChart2 size={16} /> },
+  { id: 'done', label: 'Drafts', icon: <Archive size={16} /> },
+  { id: 'active', label: 'Active', icon: <Activity size={16} /> },
+];
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setImage(reader.result as string);
-      reader.readAsDataURL(file);
+function AppShell() {
+  const {
+    userId,
+    pausedJobs,
+    activeTab,
+    setActiveTab,
+    itemQueue,
+    currentItemId,
+    switchItem,
+    createNewItem,
+    isHydrating,
+  } = useApp();
+  const [ebayConnected, setEbayConnected] = useState(false);
+  const [ebayEnv, setEbayEnv] = useState('sandbox');
+  const [ebayLoading, setEbayLoading] = useState(false);
+  const [ebayCode, setEbayCode] = useState('');
+  const [ebayExchangeLoading, setEbayExchangeLoading] = useState(false);
+
+  const refreshEbayStatus = async () => {
+    if (!userId) return;
+    try {
+      const res = await fetch(`/api/ebay/status?userId=${encodeURIComponent(userId)}`);
+      const data = await res.json();
+      setEbayConnected(Boolean(data.connected));
+      setEbayEnv(data.environment ?? 'sandbox');
+    } catch {
+      setEbayConnected(false);
     }
   };
 
-  const analyzeImage = async () => {
-    if (!image) return;
-    setLoading(true);
-    setAnalysis('');
-    setResearch('');
+  useEffect(() => {
+    refreshEbayStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
+  const connectEbay = async () => {
+    if (!userId) return;
+    setEbayLoading(true);
     try {
-      const res = await fetch('/api/analyze', {
+      const res = await fetch('/api/ebay/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image }),
+        body: JSON.stringify({ userId }),
       });
       const data = await res.json();
-      setAnalysis(data.result);
-    } catch (error) {
-      console.error('Failed to analyze image:', error);
-      setAnalysis('Error analyzing image. Check console.');
+      if (data.authUrl) {
+        window.open(data.authUrl, '_blank', 'noopener,noreferrer');
+      }
     } finally {
-      setLoading(false);
+      setEbayLoading(false);
     }
   };
 
-  const runMarketResearch = async () => {
-    if (!analysis) return;
-    setResearchLoading(true);
+  const exchangeEbayCode = async () => {
+    if (!userId || !ebayCode.trim()) return;
+    setEbayExchangeLoading(true);
     try {
-      const res = await fetch('/api/research', {
+      const res = await fetch('/api/ebay/exchange', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemDetails: analysis }),
+        body: JSON.stringify({ userId, code: ebayCode.trim() }),
       });
       const data = await res.json();
-      setResearch(data.result);
-    } catch (error) {
-      console.error('Failed to run research:', error);
-      setResearch('Error running market research. Check console.');
+      if (res.ok && data.ok) {
+        setEbayCode('');
+        await refreshEbayStatus();
+      }
     } finally {
-      setResearchLoading(false);
+      setEbayExchangeLoading(false);
     }
   };
 
   return (
-    <main className="p-8 max-w-2xl mx-auto flex flex-col gap-6">
-      <h1 className="text-3xl font-bold">Virtual Flips: Triage Agent</h1>
-
-      <div className="flex flex-col gap-4 border-2 border-dashed border-gray-300 p-8 rounded-lg text-center">
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          onChange={handleImageUpload}
-          ref={fileInputRef}
-          className="hidden"
-        />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 transition"
-        >
-          Capture / Upload Item
-        </button>
-      </div>
-
-      {image && (
-        <div className="flex flex-col gap-4">
-          <img src={image} alt="Triage Item" className="w-full h-auto rounded-md shadow-md" />
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm">
+        <h1 className="text-xl font-bold text-zinc-900 tracking-tight">Virtual Flips Engine</h1>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-400 font-mono">eBay Automation Workspace</span>
+          <span className={`text-xs px-2 py-1 rounded border ${ebayConnected ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>
+            eBay: {ebayConnected ? `Connected (${ebayEnv})` : 'Not Connected'}
+          </span>
           <button
-            onClick={analyzeImage}
-            disabled={loading}
-            className="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 transition disabled:opacity-50"
+            onClick={connectEbay}
+            disabled={ebayLoading}
+            className="text-xs bg-zinc-900 text-white px-3 py-1.5 rounded hover:bg-zinc-800 transition disabled:opacity-50"
           >
-            {loading ? 'Analyzing...' : 'Run Triage Analysis'}
+            {ebayLoading ? 'Loading...' : 'Connect eBay'}
           </button>
-        </div>
-      )}
-
-      {analysis && (
-        <div className="flex flex-col gap-4">
-          <div className="bg-gray-100 text-zinc-900 p-6 rounded-md shadow-inner whitespace-pre-wrap">
-            <h2 className="font-bold mb-2 text-lg border-b pb-1 border-gray-300">Triage Report:</h2>
-            {analysis}
-          </div>
-          
+          <input
+            value={ebayCode}
+            onChange={e => setEbayCode(e.target.value)}
+            placeholder="Paste eBay auth code"
+            className="text-xs border border-gray-300 rounded px-2 py-1.5 w-44 text-zinc-900 bg-white"
+          />
           <button
-            onClick={runMarketResearch}
-            disabled={researchLoading}
-            className="bg-purple-600 text-white px-6 py-3 rounded-md hover:bg-purple-700 transition disabled:opacity-50 font-semibold shadow-md"
+            onClick={exchangeEbayCode}
+            disabled={ebayExchangeLoading || !ebayCode.trim()}
+            className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 transition disabled:opacity-50"
           >
-            {researchLoading ? 'Searching Comps & Market Value...' : 'Run Market Research Pipeline'}
+            {ebayExchangeLoading ? 'Exchanging...' : 'Exchange Code'}
           </button>
+          <span className={`text-xs px-2 py-1 rounded border ${pausedJobs.length > 0 ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+            Jobs: {pausedJobs.length > 0 ? `${pausedJobs.length} waiting` : 'clear'}
+          </span>
         </div>
-      )}
+      </header>
 
-      {research && (
-        <div className="bg-purple-50 text-zinc-900 p-6 rounded-md shadow-inner border border-purple-200">
-          <h2 className="font-bold mb-4 text-lg text-purple-900 border-b pb-1 border-purple-200">
-            Market Intelligence Report:
-          </h2>
-          <div className="text-zinc-900 text-sm space-y-4 [&_h3]:text-lg [&_h3]:font-bold [&_h3]:mt-6 [&_h4]:text-base [&_h4]:font-bold [&_h4]:mt-4 [&_h5]:text-sm [&_h5]:font-bold [&_h5]:mt-3 [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mt-1.5 [&_strong]:font-semibold">
-            <Markdown>{research}</Markdown>
-          </div>
+      {/* Tab Navigation */}
+      <nav className="bg-white border-b border-gray-200 px-6">
+        <ul className="flex gap-1">
+          {TABS.map(tab => (
+            <li key={tab.id}>
+              <button
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-zinc-900 hover:border-gray-300'
+                }`}
+              >
+                {tab.icon}
+                {tab.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      {/* Item Queue */}
+      <section className="bg-white border-b border-gray-200 px-6 py-3">
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <button
+            onClick={createNewItem}
+            className="px-3 py-1.5 rounded text-xs font-semibold bg-zinc-900 text-white hover:bg-zinc-800 transition"
+          >
+            + New Item
+          </button>
+          {isHydrating ? (
+            <span className="text-xs text-gray-400">Loading queue...</span>
+          ) : (
+            itemQueue.map(item => (
+              <button
+                key={item.id}
+                onClick={() => switchItem(item.id)}
+                className={`px-3 py-1.5 rounded border text-xs whitespace-nowrap transition ${
+                  item.id === currentItemId
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 text-zinc-700 hover:bg-gray-50'
+                }`}
+              >
+                {item.title || 'Untitled Item'}
+              </button>
+            ))
+          )}
         </div>
-      )}
-    </main>
+      </section>
+
+      {/* Tab Content */}
+      <main className="flex-1 overflow-y-auto p-6 max-w-4xl w-full mx-auto">
+        {activeTab === 'upload' && <UploadTab />}
+        {activeTab === 'info' && <InfoTab />}
+        {activeTab === 'done' && <DraftsTab />}
+        {activeTab === 'active' && <ActiveTab />}
+      </main>
+    </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <AppProvider>
+      <AppShell />
+    </AppProvider>
   );
 }
